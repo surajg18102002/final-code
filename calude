@@ -18,7 +18,7 @@
                         "method": "get",
                         "queries": {
                             "to": "Vijayakumar.Murthy@caresource.com",
-                            "from": "caresource@service-now.com",
+                            "from": "suraj.girish@caresource.com",
                             "importance": "Any",
                             "fetchOnlyWithAttachment": false,
                             "includeAttachments": false,
@@ -287,7 +287,7 @@
             "AzureFunction": {
                 "type": "Http",
                 "inputs": {
-                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/find-similar-tickets?code=https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/find-similar-tickets?code=d-SwY5qqJ0Tr9K5AIBOtaduAkgjZVNXMYkVSnKG6zhJCAzFuvh-F9A==&job_name=', encodeUriComponent(variables('jobName')), '&job_id=', encodeUriComponent(variables('jobId')), '&ticket_number=', encodeUriComponent(variables('fullTicketNumber')))",
+                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/find-similar-tickets?code=d-SwY5qqJ0Tr9K5AIBOtaduAkgjZVNXMYkVSnKG6zhJCAzFuvh-F9A==&job_name=', encodeUriComponent(variables('jobName')), '&job_id=', encodeUriComponent(variables('jobId')), '&ticket_number=', encodeUriComponent(variables('fullTicketNumber')))",
                     "method": "GET",
                     "headers": {
                         "Content-Type": "application/json"
@@ -295,7 +295,7 @@
                 },
                 "runAfter": {
                     "TidalOutput": [
-                        "SUCCEEDED"
+                        "Succeeded"
                     ]
                 },
                 "runtimeConfiguration": {
@@ -317,8 +317,105 @@
                 },
                 "runAfter": {
                     "AzureFunction": [
-                        "SUCCEEDED"
+                        "Succeeded"
                     ]
+                }
+            },
+            "HTTP_GPT4o": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview",
+                    "method": "POST",
+                    "headers": {
+                        "api-key": "AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q",
+                        "Content-Type": "application/json"
+                    },
+                    "body": "@concat('{\"messages\":[{\"role\":\"system\",\"content\":\"You are an expert IT Operations analyst specialising in Tidal job scheduling failures. You will be given a current incident and the top 3 most similar past incidents found by similarity search. Generate a detailed resolution report.\"},{\"role\":\"user\",\"content\":\"## CURRENT INCIDENT\nTicket: ', variables('fullTicketNumber'), '\nJob Name: ', variables('jobName'), '\nJob ID: ', variables('jobId'), '\nTidal Error Log:\n', outputs('TidalOutput'), '\n\n## TOP 3 SIMILAR PAST INCIDENTS (from similarity search)\n', variables('output azure function'), '\n\n## GENERATE THIS EXACT REPORT:\n\n=== TIDAL INCIDENT ANALYSIS REPORT ===\nTicket: ', variables('fullTicketNumber'), '\nJob: ', variables('jobName'), '\n\n--- ERROR SUMMARY ---\n[What failed, which job, which agent, which parent path from Tidal log]\n\n--- ROOT CAUSE ANALYSIS ---\n[Most likely root cause based on the 3 similar incidents]\n\n--- TOP 3 SIMILAR PAST INCIDENTS ---\n1. Ticket: [number] | Config: [config_item]\n   What happened: [from resolution_action]\n   Similarity score: [score]\n\n2. Ticket: [number] | Config: [config_item]\n   What happened: [from resolution_action]\n   Similarity score: [score]\n\n3. Ticket: [number] | Config: [config_item]\n   What happened: [from resolution_action]\n   Similarity score: [score]\n\n--- RECOMMENDED RESOLUTION STEPS ---\n[Numbered specific steps based on how similar incidents were resolved]\n\n--- PREVENTIVE MEASURES ---\n[Concrete actions to prevent recurrence]\"}],\"max_tokens\":2000,\"temperature\":0.2}')"
+                },
+                "runAfter": {
+                    "output_azure_function_VAR": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Parse_JSON_GPT": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('HTTP_GPT4o')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "choices": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "object",
+                                            "properties": {
+                                                "content": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "HTTP_GPT4o": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Initialize_variables-copy": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "finalReport",
+                            "type": "string",
+                            "value": "@{body('Parse_JSON_GPT')?['choices'][0]?['message']?['content']}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON_GPT": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "snow_update_ticket": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://apigateway-crt.caresource.corp/ServiceNow/Incident/CreateUpdate/Sync/",
+                    "method": "POST",
+                    "headers": {
+                        "X-API-KEY": "ax_38496da1-cf1c-4715-9712-3e6ca826e71e",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    "body": "@concat('{\"RequestData\":{\"Source\":\"Code Warehouse Automation\",\"IncidentDetails\":[{\"IncidentNumber\":\"', variables('fullTicketNumber'), '\",\"State\":\"6\",\"ResolutionNotes\":\"', replace(replace(variables('finalReport'), '\"', '\"'), decodeUriComponent('%0A'), '\n'), '\",\"AdditionalComments\":\"Resolved via Tidal RAG Analysis\"}]}}')"
+                },
+                "runAfter": {
+                    "Initialize_variables-copy": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
                 }
             }
         },
