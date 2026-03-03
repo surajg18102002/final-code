@@ -9,13 +9,16 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from azure.storage.blob import BlobServiceClient
+from azure.ai.inference import ChatCompletionsClient
+from azure.ai.inference.models import SystemMessage, UserMessage
+from azure.core.credentials import AzureKeyCredential
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 _df_cache = None
 
 # ============================================================
-# SECRETS — all from Azure Function App Settings (never hardcoded)
+# SECRETS — all from Azure Function Environment Variables
 # ============================================================
 
 SNOW_GET_URL    = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/1.0"
@@ -28,8 +31,9 @@ TIDAL_API_KEY   = os.environ["TIDAL_API_KEY"]
 SNOW_UPDATE_URL = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/CreateUpdate/Sync/"
 SNOW_UPDATE_KEY = os.environ["SNOW_UPDATE_KEY"]
 
-GPT_URL         = os.environ["GPT_URL"]
+GPT_ENDPOINT    = os.environ["GPT_ENDPOINT"]   # https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com
 GPT_KEY         = os.environ["GPT_KEY"]
+GPT_MODEL       = os.environ["GPT_MODEL"]       # model-router
 
 
 # ============================================================
@@ -217,7 +221,7 @@ def find_similar_tickets_http(req: func.HttpRequest) -> func.HttpResponse:
 
 
 # ============================================================
-# ROUTE 2 — new full pipeline
+# ROUTE 2 — full pipeline
 # ============================================================
 
 @app.route(route="process-incident", methods=["GET", "POST"])
@@ -328,60 +332,52 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
         for i, t in enumerate(top_3)
     ]) or "No similar tickets found"
 
-    # ── 5. GPT-4o analysis ────────────────────────────────────────────────
+    # ── 5. GPT analysis via azure-ai-inference SDK ────────────────────────
     final_report = ""
     try:
-        gpt_payload = {
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "You are an expert IT Operations analyst specialising in "
-                        "Tidal job scheduling failures. Generate a detailed resolution report."
-                    )
-                },
-                {
-                    "role": "user",
-                    "content": (
-                        f"## CURRENT INCIDENT\n"
-                        f"Ticket: {incident_number}\n"
-                        f"Job Name: {job_name}\n"
-                        f"Job ID: {job_id}\n"
-                        f"Tidal Error Log:\n{tidal_output}\n\n"
-                        f"## TOP 3 SIMILAR PAST INCIDENTS\n{similar_text}\n\n"
-                        f"## GENERATE THIS EXACT REPORT:\n\n"
-                        f"=== TIDAL INCIDENT ANALYSIS REPORT ===\n"
-                        f"Ticket: {incident_number}\nJob: {job_name}\n\n"
-                        f"--- ERROR SUMMARY ---\n"
-                        f"[What failed, which job, which agent]\n\n"
-                        f"--- ROOT CAUSE ANALYSIS ---\n"
-                        f"[Most likely root cause based on similar incidents]\n\n"
-                        f"--- TOP 3 SIMILAR PAST INCIDENTS ---\n"
-                        f"[Fill from above data]\n\n"
-                        f"--- RECOMMENDED RESOLUTION STEPS ---\n"
-                        f"[Numbered specific steps]\n\n"
-                        f"--- PREVENTIVE MEASURES ---\n"
-                        f"[Concrete actions to prevent recurrence]"
-                    )
-                }
-            ],
-            "max_tokens": 2000,
-            "temperature": 0.2
-        }
-        gpt_resp = requests.post(
-            GPT_URL,
-            headers={"api-key": GPT_KEY, "Content-Type": "application/json"},
-            json=gpt_payload,
-            timeout=60
+        gpt_client = ChatCompletionsClient(
+            endpoint=GPT_ENDPOINT,
+            credential=AzureKeyCredential(GPT_KEY)
         )
-        gpt_resp.raise_for_status()
-        final_report = gpt_resp.json()["choices"][0]["message"]["content"]
+        gpt_response = gpt_client.complete(
+            messages=[
+                SystemMessage(content=(
+                    "You are an expert IT Operations analyst specialising in "
+                    "Tidal job scheduling failures. Generate a detailed resolution report."
+                )),
+                UserMessage(content=(
+                    f"## CURRENT INCIDENT\n"
+                    f"Ticket: {incident_number}\n"
+                    f"Job Name: {job_name}\n"
+                    f"Job ID: {job_id}\n"
+                    f"Tidal Error Log:\n{tidal_output}\n\n"
+                    f"## TOP 3 SIMILAR PAST INCIDENTS\n{similar_text}\n\n"
+                    f"## GENERATE THIS EXACT REPORT:\n\n"
+                    f"=== TIDAL INCIDENT ANALYSIS REPORT ===\n"
+                    f"Ticket: {incident_number}\nJob: {job_name}\n\n"
+                    f"--- ERROR SUMMARY ---\n"
+                    f"[What failed, which job, which agent]\n\n"
+                    f"--- ROOT CAUSE ANALYSIS ---\n"
+                    f"[Most likely root cause based on similar incidents]\n\n"
+                    f"--- TOP 3 SIMILAR PAST INCIDENTS ---\n"
+                    f"[Fill from above data]\n\n"
+                    f"--- RECOMMENDED RESOLUTION STEPS ---\n"
+                    f"[Numbered specific steps]\n\n"
+                    f"--- PREVENTIVE MEASURES ---\n"
+                    f"[Concrete actions to prevent recurrence]"
+                ))
+            ],
+            model=GPT_MODEL,
+            max_tokens=2000,
+            temperature=0.2
+        )
+        final_report = gpt_response.choices[0].message.content
         pipeline["steps"]["gpt_analysis"] = "success"
     except Exception as e:
         final_report = f"GPT analysis failed: {e}"
         pipeline["steps"]["gpt_analysis"] = f"FAILED: {e}"
 
-    # ── 6. Update ServiceNow ──────────────────────────────────────────────
+    # ── 6. Update ServiceNow (add work note only) ─────────────────────────
     try:
         update_resp = requests.post(
             SNOW_UPDATE_URL,
@@ -393,12 +389,10 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
             json={
                 "RequestData": {
                     "Source": "Code Warehouse Automation",
-                    "IncidentDetails": [{
+                    "IncidentDetails": {
                         "IncidentNumber":     incident_number,
-                        "State":              "6",
-                        "ResolutionNotes":    final_report,
-                        "AdditionalComments": "Resolved via Tidal RAG Analysis"
-                    }]
+                        "AdditionalComments": final_report
+                    }
                 }
             },
             timeout=30,
