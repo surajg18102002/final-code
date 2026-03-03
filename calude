@@ -1,56 +1,34 @@
-I'll help you convert that C# Azure OpenAI code to Python. Let me provide you with the Python equivalent:
+Looking at the code shared earlier, the endpoint is already there. Let me update the function with the correct GPT approach and env variable references.
 
-```python name=azure_openai_client.py
-from azure.ai.inference import ChatCompletionsClient
-from azure.core.credentials import AzureKeyCredential
-
-endpoint = "https://xxxxxxxx-model-router"
-api_key = "<API_KEY>"
-model = "model-router"
-
-client = ChatCompletionsClient(
-    endpoint=endpoint,
-    credential=AzureKeyCredential(api_key)
-)
+The endpoint from your earlier code is:
+```
+https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com
 ```
 
-**Key differences from C# to Python:**
-
-1. **Imports**: Use `azure.ai.inference` instead of the .NET package
-2. **URI vs String**: Python uses a simple string for the endpoint URL (no `Uri` wrapper needed)
-3. **Credential**: `AzureKeyCredential` works the same way in both languages
-4. **Client Options**: The `AzureAIInferenceClientOptions()` is optional in Python and not required in most basic use cases
-
-**To use this, you'll need to install the Azure SDK:**
-
-```bash
-pip install azure-ai-inference azure-identity
+And the model-router pattern means the URL should be:
+```
+https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/models
 ```
 
-**Complete example with a chat completion request:**
+**Step 1 — Add these to Azure Function Environment Variables:**
 
-```python name=azure_openai_example.py
-from azure.ai.inference import ChatCompletionsClient
-from azure.core.credentials import AzureKeyCredential
+| Name | Value |
+|---|---|
+| `GPT_ENDPOINT` | `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com` |
+| `GPT_KEY` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
+| `GPT_MODEL` | `model-router` |
+| `TIDAL_API_KEY` | your Tidal x-api-key |
 
-endpoint = "https://xxxxxxxx-model-router"
-api_key = "<API_KEY>"
-model = "model-router"
+Remove `GPT_URL` if you already added it — it's replaced by `GPT_ENDPOINT` and `GPT_MODEL`.
 
-client = ChatCompletionsClient(
-    endpoint=endpoint,
-    credential=AzureKeyCredential(api_key)
-)
+**Step 2 — Update `requirements.txt`:****Paste both files into GitHub, then add these env variables in Azure Function:**
 
-# Make a chat completion request
-response = client.complete(
-    messages=[
-        {"role": "user", "content": "Hello, how are you?"}
-    ],
-    model=model
-)
+| Name | Value |
+|---|---|
+| `GPT_ENDPOINT` | `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com` |
+| `GPT_KEY` | your GPT API key |
+| `GPT_MODEL` | `model-router` |
 
-print(response.choices[0].message.content)
-```
+**Remove `GPT_URL`** from env variables if you added it earlier — it's replaced by the three above.
 
-This Python code is equivalent to the C# code you provided and will work with Azure OpenAI or compatible endpoints.
+The key change for GPT is it now uses the `azure-ai-inference` SDK with `ChatCompletionsClient` instead of a raw HTTP call, which is the correct way to call the model-router endpoint. Everything else stays the same.
