@@ -1,45 +1,56 @@
-{
-    "incident_number": "INC1619209",
-    "steps": {
-        "servicenow_fetch": "success",
-        "tidal_fetch": "FAILED: 401 Client Error: Unauthorized for url: https://crt-apim.caresource.corp/TidalAutomation/",
-        "similarity_search": "success",
-        "gpt_analysis": "FAILED: 404 Client Error: DeploymentNotFound for url: https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview",
-        "servicenow_update": "success"
-    },
-    "parsed": {
-        "job_name": "Tidal Job Import_BEQ_Response",
-        "job_id": "4901585",
-        "short_desc": "Tidal Job Import_BEQ_Response | 4901585 | Comnpleted Abnormally",
-        "config_item": "Tidal Job Class checking Jobs"
-    },
-    "snow_update_response": {
-        "CorrelationGuid": "",
-        "Error": {
-            "Message": "[Input ProfileLocation: Root/Object/RequestData/Object/IncidentDetails/Object; DocumentLocation: /Root/Object/RequestData/Object/IncidentDetails/Object]: Expected START_OBJECT, found START_ARRAY",
-            "MessageCode": "21002-SERVICENOW_INVALID_DATA"
-        }
-    },
-    "final_report": "GPT analysis failed: 404 Client Error: DeploymentNotFound for url: https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview",
-    "top_3_similar": [
-        {
-            "ticket_number": "INC1544963",
-            "config_item": "Tidal Jobs WoD",
-            "resolution_action": "0290075: Job completed normally in Tidal CRT",
-            "similarity_score": 0.2279
-        },
-        {
-            "ticket_number": "INC1480615",
-            "config_item": "ProcessWorkQueueAssignment",
-            "resolution_action": "PRD Tidal Job ProcessWorkQueueAssignment the subsequent jobs, completed successfully. Hence, this incident has been closed. Parent:\\CTS\\Microservices | Agent: DAYPRDCISAPP11 PRD Tidal Job ProcessWorkQueueAssignment the subsequent jobs, completed successfully. Hence, this incident has been closed.",
-            "similarity_score": 0.1973
-        },
-        {
-            "ticket_number": "INC1481514",
-            "config_item": "ProcessWorkQueueAssignment",
-            "resolution_action": "Parent:\\CTS\\Microservices | Agent: DAYPRDCISAPP11 PRD Tidal Job ProcessWorkQueueAssignment the subsequent jobs, completed successfully. Hence, this incident has been closed.",
-            "similarity_score": 0.1858
-        }
+I'll help you convert that C# Azure OpenAI code to Python. Let me provide you with the Python equivalent:
+
+```python name=azure_openai_client.py
+from azure.ai.inference import ChatCompletionsClient
+from azure.core.credentials import AzureKeyCredential
+
+endpoint = "https://xxxxxxxx-model-router"
+api_key = "<API_KEY>"
+model = "model-router"
+
+client = ChatCompletionsClient(
+    endpoint=endpoint,
+    credential=AzureKeyCredential(api_key)
+)
+```
+
+**Key differences from C# to Python:**
+
+1. **Imports**: Use `azure.ai.inference` instead of the .NET package
+2. **URI vs String**: Python uses a simple string for the endpoint URL (no `Uri` wrapper needed)
+3. **Credential**: `AzureKeyCredential` works the same way in both languages
+4. **Client Options**: The `AzureAIInferenceClientOptions()` is optional in Python and not required in most basic use cases
+
+**To use this, you'll need to install the Azure SDK:**
+
+```bash
+pip install azure-ai-inference azure-identity
+```
+
+**Complete example with a chat completion request:**
+
+```python name=azure_openai_example.py
+from azure.ai.inference import ChatCompletionsClient
+from azure.core.credentials import AzureKeyCredential
+
+endpoint = "https://xxxxxxxx-model-router"
+api_key = "<API_KEY>"
+model = "model-router"
+
+client = ChatCompletionsClient(
+    endpoint=endpoint,
+    credential=AzureKeyCredential(api_key)
+)
+
+# Make a chat completion request
+response = client.complete(
+    messages=[
+        {"role": "user", "content": "Hello, how are you?"}
     ],
-    "tidal_raw": "Tidal fetch failed: 401 Client Error: Unauthorized for url: https://crt-apim.caresource.corp/TidalAutomation/"
-}
+    model=model
+)
+
+print(response.choices[0].message.content)
+```
+
+This Python code is equivalent to the C# code you provided and will work with Azure OpenAI or compatible endpoints.
