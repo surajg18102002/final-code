@@ -1,5 +1,7 @@
 azure-functions
 azure-storage-blob
+azure-ai-inference
+azure-core
 pandas
 scikit-learn
 openpyxl
