@@ -1,28 +1,173 @@
-OK so the code is deployed. Then the env variables `TIDAL_USER` and `TIDAL_PASSWORD` are not set correctly. Let's verify.
+Good 👍 let’s **verify the exact characters in the password** so we can detect:
 
-**Go to Function App → Console and run:**
+* trailing spaces
+* newline characters
+* hidden characters
+* escaping issues with `^` or `\`
+
+Run these commands in **Kudu SSH**.
+
+---
+
+# 🔍 1️⃣ Show Character-by-Character Password
+
+Run:
+
+```bash
+echo "$TIDAL_PASSWORD" | od -c
 ```
-echo $TIDAL_USER
-echo $TIDAL_PASSWORD
-echo $TIDAL_BASE_URL
+
+Example output:
+
+```
+0000000   5   2   3   e   R   P   ^   9   h   x   Q   P   I   7   G   k
+0000020   E   V   g   z   i   1   N   N   ^   6   u   v   i   w  \n
 ```
 
-Tell me what it prints — if any of them are blank, that's the problem.
+Look carefully for:
 
-Also run this to see exactly what auth string is being built:
-```python
-python3 -c "
-import base64, os
-u = os.environ.get('TIDAL_USER', 'NOT SET')
-p = os.environ.get('TIDAL_PASSWORD', 'NOT SET')
-creds = f'{u}:{p}'
-token = base64.b64encode(creds.encode()).decode()
-print(f'User: {u}')
-print(f'Pass: {p}')
-print(f'Token: {token}')
-print(f'Expected: Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM2VSUF46aHhRuEk3R2tFVmd6aTFOTl42dXZpdw==')
-print(f'Match: {token == \"Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM2VSUF46aHhRuEk3R2tFVmd6aTFOTl42dXZpdw==\"}')
+```
+\n   → newline
+space → trailing space
+```
+
+If you see something like:
+
+```
+w  \n
+```
+
+that means there is a **newline added automatically**.
+
+---
+
+# 🔍 2️⃣ Show Password Length
+
+Run:
+
+```bash
+echo -n "$TIDAL_PASSWORD" | wc -c
+```
+
+Example:
+
+```
+29
+```
+
+If the length is **30 or 31**, you likely have:
+
+* trailing space
+* newline
+
+---
+
+# 🔍 3️⃣ Show Hidden Characters Safely
+
+Run:
+
+```bash
+printf "%q\n" "$TIDAL_PASSWORD"
+```
+
+Example output:
+
+```
+523eRP^9hxQPI7GkEVgzi1NN^6uviw
+```
+
+If it shows something like:
+
+```
+523eRP^9hxQPI7GkEVgzi1NN^6uviw\n
+```
+
+Then newline is present.
+
+---
+
+# 🔍 4️⃣ Generate the Correct Base64 Token
+
+Run:
+
+```bash
+python3 -c "import os,base64;print(base64.b64encode(f'{os.getenv('TIDAL_USER')}:{os.getenv('TIDAL_PASSWORD')}'.encode()).decode())"
+```
+
+This prints the **exact Authorization token your function will use**.
+
+---
+
+# 🔧 If You Find a Hidden Character
+
+Go to:
+
+```
+Azure Portal
+→ Function App
+→ Configuration
+→ Application Settings
+```
+
+Edit:
+
+```
+TIDAL_PASSWORD
+```
+
+Delete it and **retype manually**.
+
+Then:
+
+```
+Restart Function App
+```
+
+---
+
+# 🧠 Important Tip
+
+Passwords with these characters sometimes break in env variables:
+
+```
+^
+$
+\
+`
 "
+'
 ```
 
-This will tell us immediately if the token being built matches the working curl token. If `Match: False` we know exactly what's wrong with the credentials.
+Your password contains:
+
+```
+^
+```
+
+So it's very likely the issue.
+
+---
+
+# 🔐 After Fix
+
+Your Authorization header must be:
+
+```
+Authorization: Basic <base64(username:password)>
+```
+
+Example:
+
+```
+Authorization: Basic Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM1JQXjloeFFQSTdHa0V2Z3ppMU5OXjZ1dml3
+```
+
+---
+
+If you paste the output of:
+
+```
+echo "$TIDAL_PASSWORD" | od -c
+```
+
+I can **immediately pinpoint the exact hidden character causing the mismatch**.
