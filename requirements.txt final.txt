@@ -1,18 +1,45 @@
-GPT is working. Now just update the env variables and no code changes needed.
-
-**Update these 3 env variables in Azure Function:**
-
-| Name | Value |
-|---|---|
-| `GPT_ENDPOINT` | `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/rg-aif-dev-eastus2-01-model-router` |
-| `GPT_MODEL` | `model-router` |
-| `GPT_KEY` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
-
-Save → Confirm restart → test from Postman again.
-
-The only remaining issue after this will be Tidal 401 which needs the new code with `TIDAL_AUTH_TOKEN` deployed first. So the order is:
-
-1. Commit and deploy the new `function_app.py` to GitHub
-2. Add `TIDAL_AUTH_TOKEN` env variable
-3. Update `GPT_ENDPOINT` to the full deployment URL above
-4. Test — both Tidal and GPT should work
+{
+    "incident_number": "INC1619209",
+    "steps": {
+        "servicenow_fetch": "success",
+        "tidal_fetch": "FAILED: 401 Client Error: Unauthorized for url: https://crt-apim.caresource.corp/TidalAutomation/",
+        "similarity_search": "success",
+        "gpt_analysis": "FAILED: (404) Resource not found\nCode: 404\nMessage: Resource not found",
+        "servicenow_update": "success"
+    },
+    "parsed": {
+        "job_name": "Tidal Job Import_BEQ_Response",
+        "job_id": "4901585",
+        "short_desc": "Tidal Job Import_BEQ_Response | 4901585 | Comnpleted Abnormally",
+        "config_item": "Tidal Job Class checking Jobs"
+    },
+    "snow_update_response": {
+        "CorrelationGuid": "",
+        "Error": {
+            "Message": "null\n",
+            "MessageCode": "21002-SERVICENOW_INVALID_DATA"
+        }
+    },
+    "final_report": "GPT analysis failed: (404) Resource not found\nCode: 404\nMessage: Resource not found",
+    "top_3_similar": [
+        {
+            "ticket_number": "INC1544963",
+            "config_item": "Tidal Jobs WoD",
+            "resolution_action": "0290075: Job completed normally in Tidal CRT",
+            "similarity_score": 0.2279
+        },
+        {
+            "ticket_number": "INC1480615",
+            "config_item": "ProcessWorkQueueAssignment",
+            "resolution_action": "PRD Tidal Job ProcessWorkQueueAssignment the subsequent jobs, completed successfully. Hence, this incident has been closed. Parent:\\CTS\\Microservices | Agent: DAYPRDCISAPP11 PRD Tidal Job ProcessWorkQueueAssignment the subsequent jobs, completed successfully. Hence, this incident has been closed.",
+            "similarity_score": 0.1973
+        },
+        {
+            "ticket_number": "INC1481514",
+            "config_item": "ProcessWorkQueueAssignment",
+            "resolution_action": "Parent:\\CTS\\Microservices | Agent: DAYPRDCISAPP11 PRD Tidal Job ProcessWorkQueueAssignment the subsequent jobs, completed successfully. Hence, this incident has been closed.",
+            "similarity_score": 0.1858
+        }
+    ],
+    "tidal_raw": "Tidal fetch failed: 401 Client Error: Unauthorized for url: https://crt-apim.caresource.corp/TidalAutomation/"
+}
