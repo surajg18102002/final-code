@@ -1,29 +1,10 @@
-Good — so functions are loading now. Just Tidal 401 remaining.
+`ModuleNotFoundError: No module named 'requests'` — the `requests` package isn't installed in the Kudu shell environment. But more importantly this tells us the function app itself may also be missing packages.
 
-Since the token is correct in env and the code is correct, let's test the exact request the code is making. Run this in Kudu:
-
+**Run this in Kudu:**
 ```
-python3 -c "
-import os, requests
-token = os.environ.get('TIDAL_AUTH_TOKEN', 'NOT SET')
-api_key = os.environ.get('TIDAL_API_KEY', 'NOT SET')
-url = os.environ.get('TIDAL_BASE_URL', 'NOT SET')
-
-xml = '<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><entry xmlns=\"http://purl.org/atom/ns#\"><tes:JobOutput.getJobOutputRaw xmlns:tes=\"http://www.tidalsoftware.com/client/tesservlet\"><id>4901585</id></tes:JobOutput.getJobOutputRaw></entry>'
-
-headers = {
-    'User-Agent': 'CareSource-TidalJobs/1.2',
-    'Authorization': f'basic {token}',
-    'x-api-key': api_key,
-    'Content-Type': 'application/x-www-form-urlencoded'
-}
-
-r = requests.post(url, headers=headers, data={'data': xml}, verify=False, timeout=30)
-print(f'Status: {r.status_code}')
-print(f'Response: {r.text[:500]}')
-"
+python3 -m pip install requests azure-ai-inference azure-core --target /home/site/wwwroot/.python_packages/lib/site-packages
 ```
 
-This runs the exact same request as the function code directly from the Azure environment. If this returns 401 it confirms the token is rejected from Azure's network. If it returns 200 then something else in the function code is wrong.
+Then restart the function app from the portal and test from Postman again.
 
-Tell me what status code it prints.
+This installs the packages into the correct location that Azure Functions uses at runtime.
