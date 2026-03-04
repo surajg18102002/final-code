@@ -4,7 +4,6 @@ import json
 import os
 import io
 import re
-import base64
 import requests
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -22,29 +21,26 @@ _df_cache = None
 # SECRETS — all from Azure Function Environment Variables
 # ============================================================
 
-SNOW_GET_URL    = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/1.0"
-SNOW_GET_KEY    = os.environ["SNOW_GET_KEY"]
+SNOW_GET_URL     = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/1.0"
+SNOW_GET_KEY     = os.environ["SNOW_GET_KEY"]
 
-TIDAL_URL       = os.environ["TIDAL_BASE_URL"]       # https://crt-apim.caresource.corp/TidalAutomation/
-TIDAL_USERNAME  = os.environ["TIDAL_USER"]            # caresource\CST_DashAuto_SVC
-TIDAL_PASSWORD  = os.environ["TIDAL_PASSWORD"]        # actual password
-TIDAL_API_KEY   = os.environ["TIDAL_API_KEY"]         # 9d4e3372a8c7401b85a05be195e746e2
+TIDAL_URL        = os.environ["TIDAL_BASE_URL"]       # https://crt-apim.caresource.corp/TidalAutomation/
+TIDAL_AUTH_TOKEN = os.environ["TIDAL_AUTH_TOKEN"]     # pre-encoded base64 token from working curl
+TIDAL_API_KEY    = os.environ["TIDAL_API_KEY"]        # x-api-key
 
-SNOW_UPDATE_URL = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/CreateUpdate/Sync/"
-SNOW_UPDATE_KEY = os.environ["SNOW_UPDATE_KEY"]
+SNOW_UPDATE_URL  = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/CreateUpdate/Sync/"
+SNOW_UPDATE_KEY  = os.environ["SNOW_UPDATE_KEY"]
 
-GPT_ENDPOINT    = os.environ["GPT_ENDPOINT"]          # https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com
-GPT_KEY         = os.environ["GPT_KEY"]
-GPT_MODEL       = os.environ["GPT_MODEL"]             # model-router
+GPT_ENDPOINT     = os.environ["GPT_ENDPOINT"]         # https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com
+GPT_KEY          = os.environ["GPT_KEY"]
+GPT_MODEL        = os.environ["GPT_MODEL"]            # model-router
 
 
 def get_tidal_headers() -> dict:
-    """Build Tidal auth headers exactly as the working pattern."""
-    credentials = f"{TIDAL_USERNAME}:{TIDAL_PASSWORD}"
-    auth_string = base64.b64encode(credentials.encode()).decode()
+    """Tidal auth headers — token used directly from env, no re-encoding."""
     return {
         "User-Agent":    "CareSource-TidalJobs/1.2",
-        "Authorization": f"Basic {auth_string}",
+        "Authorization": f"Basic {TIDAL_AUTH_TOKEN}",
         "x-api-key":     TIDAL_API_KEY,
         "Content-Type":  "application/x-www-form-urlencoded"
     }
@@ -313,7 +309,7 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
             tidal_resp = requests.post(
                 TIDAL_URL,
                 headers=get_tidal_headers(),
-                data={"data": xml_payload},   # dict — matches working pattern
+                data={"data": xml_payload},
                 timeout=60,
                 verify=False
             )
