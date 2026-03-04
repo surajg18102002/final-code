@@ -1,8 +1,35 @@
-azure-functions
-azure-storage-blob
-azure-ai-inference
-azure-core
-pandas
-scikit-learn
-openpyxl
-requests
+Now I can see exactly what's needed. The deployment name is **`rg-aif-dev-eastus2-01-model-router`** not `model-router`, and the endpoint includes that full name in the path.
+
+**Update these env variables:**
+
+| Name | Value |
+|---|---|
+| `GPT_ENDPOINT` | `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/rg-aif-dev-eastus2-01-model-router` |
+| `GPT_MODEL` | `model-router` |
+| `GPT_KEY` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
+
+**Test in Postman first:**
+
+**Method:** `POST`
+
+**URL:**
+```
+https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/rg-aif-dev-eastus2-01-model-router/chat/completions?api-version=2025-01-01-preview
+```
+
+**Headers:**
+| Key | Value |
+|---|---|
+| `api-key` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
+| `Content-Type` | `application/json` |
+
+**Body → raw → JSON:**
+```json
+{
+  "model": "model-router",
+  "messages": [{"role": "user", "content": "Say hello"}],
+  "max_tokens": 100
+}
+```
+
+If that returns 200 in Postman, then just update the `GPT_ENDPOINT` env variable and the code will work without any code changes.
