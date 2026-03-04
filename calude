@@ -1,173 +1,191 @@
-Good 👍 let’s **verify the exact characters in the password** so we can detect:
-
-* trailing spaces
-* newline characters
-* hidden characters
-* escaping issues with `^` or `\`
-
-Run these commands in **Kudu SSH**.
+Great — your debugging output actually tells us **everything we need**. Let's analyze it.
 
 ---
 
-# 🔍 1️⃣ Show Character-by-Character Password
+# 🔍 What Your Output Shows
 
-Run:
+From:
 
 ```bash
 echo "$TIDAL_PASSWORD" | od -c
 ```
 
-Example output:
+You got:
 
 ```
-0000000   5   2   3   e   R   P   ^   9   h   x   Q   P   I   7   G   k
-0000020   E   V   g   z   i   1   N   N   ^   6   u   v   i   w  \n
+5 2 3 e R P ^ 9 h x Q P I 7 G k
+E V g z i 1 N N ^ 6 u v i w \n
 ```
 
-Look carefully for:
+Important part:
 
 ```
-\n   → newline
-space → trailing space
+\n
 ```
 
-If you see something like:
+That newline is **not part of the password** — it is added by `echo`.
 
-```
-w  \n
-```
-
-that means there is a **newline added automatically**.
-
----
-
-# 🔍 2️⃣ Show Password Length
-
-Run:
-
-```bash
-echo -n "$TIDAL_PASSWORD" | wc -c
-```
-
-Example:
-
-```
-29
-```
-
-If the length is **30 or 31**, you likely have:
-
-* trailing space
-* newline
-
----
-
-# 🔍 3️⃣ Show Hidden Characters Safely
-
-Run:
-
-```bash
-printf "%q\n" "$TIDAL_PASSWORD"
-```
-
-Example output:
+So the password itself is:
 
 ```
 523eRP^9hxQPI7GkEVgzi1NN^6uviw
 ```
 
-If it shows something like:
+---
+
+# 🔍 Password Length Check
+
+You ran:
+
+```bash
+echo -n "$TIDAL_PASSWORD" | wc -c
+```
+
+Result:
 
 ```
-523eRP^9hxQPI7GkEVgzi1NN^6uviw\n
+30
 ```
 
-Then newline is present.
+So the password length = **30 characters**, which is correct.
 
 ---
 
-# 🔍 4️⃣ Generate the Correct Base64 Token
+# 🔍 Hidden Character Check
 
-Run:
+You ran:
+
+```bash
+printf "%q\n" "$TIDAL_PASSWORD"
+```
+
+Output:
+
+```
+523eRP\^9hxQPI7GkEVgzi1NN\^6uviw
+```
+
+This shows the `^` characters are simply escaped for display.
+
+Actual password is still:
+
+```
+523eRP^9hxQPI7GkEVgzi1NN^6uviw
+```
+
+So **no hidden characters** exist.
+
+---
+
+# ⚠️ Why Your Base64 Still Didn't Match
+
+Earlier your script printed:
+
+```
+Token:    Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM2V...
+Expected: Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM3J...
+Match: False
+```
+
+The difference is here:
+
+```
+523eRP
+523rRP
+```
+
+Notice:
+
+```
+e  vs  r
+```
+
+So the **expected token was generated from a different password**.
+
+---
+
+# 🧠 What This Means
+
+Your Azure Function is using:
+
+```
+523eRP^9hxQPI7GkEVgzi1NN^6uviw
+```
+
+But the **expected Base64 token was created with another password**.
+
+So your expected value is wrong.
+
+---
+
+# ✅ How To Generate the Correct Authorization Header
+
+Run this in Kudu:
 
 ```bash
 python3 -c "import os,base64;print(base64.b64encode(f'{os.getenv('TIDAL_USER')}:{os.getenv('TIDAL_PASSWORD')}'.encode()).decode())"
 ```
 
-This prints the **exact Authorization token your function will use**.
+That output is the **true Basic Auth token**.
 
----
-
-# 🔧 If You Find a Hidden Character
-
-Go to:
+Your header should be:
 
 ```
-Azure Portal
-→ Function App
-→ Configuration
-→ Application Settings
-```
-
-Edit:
-
-```
-TIDAL_PASSWORD
-```
-
-Delete it and **retype manually**.
-
-Then:
-
-```
-Restart Function App
+Authorization: Basic <that_output>
 ```
 
 ---
 
-# 🧠 Important Tip
+# 🧪 Quick Manual Verification
 
-Passwords with these characters sometimes break in env variables:
-
-```
-^
-$
-\
-`
-"
-'
-```
-
-Your password contains:
+Username:
 
 ```
-^
+caresource\CST_DashAuto_SVC
 ```
 
-So it's very likely the issue.
+Password:
+
+```
+523eRP^9hxQPI7GkEVgzi1NN^6uviw
+```
+
+Combine:
+
+```
+caresource\CST_DashAuto_SVC:523eRP^9hxQPI7GkEVgzi1NN^6uviw
+```
+
+Then Base64 encode.
 
 ---
 
-# 🔐 After Fix
+# 🚨 Important Security Advice
 
-Your Authorization header must be:
+Your screenshot exposed:
+
+* Service account
+* Password
+* Internal API endpoint
+
+You should **rotate this password immediately** in your environment.
+
+---
+
+# 🎯 Final Conclusion
+
+Nothing is wrong with:
+
+* environment variable
+* password storage
+* encoding logic
+
+The only issue was:
 
 ```
-Authorization: Basic <base64(username:password)>
-```
-
-Example:
-
-```
-Authorization: Basic Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM1JQXjloeFFQSTdHa0V2Z3ppMU5OXjZ1dml3
+Your "expected" Base64 token was generated using a different password.
 ```
 
 ---
 
-If you paste the output of:
-
-```
-echo "$TIDAL_PASSWORD" | od -c
-```
-
-I can **immediately pinpoint the exact hidden character causing the mismatch**.
+If you want, I can also show a **much cleaner way to generate Basic Auth inside your Azure Function code so you never have to manually compute tokens again**.
