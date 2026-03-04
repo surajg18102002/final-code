@@ -1,35 +1,69 @@
-Now I can see exactly what's needed. The deployment name is **`rg-aif-dev-eastus2-01-model-router`** not `model-router`, and the endpoint includes that full name in the path.
-
-**Update these env variables:**
-
-| Name | Value |
-|---|---|
-| `GPT_ENDPOINT` | `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/rg-aif-dev-eastus2-01-model-router` |
-| `GPT_MODEL` | `model-router` |
-| `GPT_KEY` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
-
-**Test in Postman first:**
-
-**Method:** `POST`
-
-**URL:**
-```
-https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/rg-aif-dev-eastus2-01-model-router/chat/completions?api-version=2025-01-01-preview
-```
-
-**Headers:**
-| Key | Value |
-|---|---|
-| `api-key` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
-| `Content-Type` | `application/json` |
-
-**Body → raw → JSON:**
-```json
 {
-  "model": "model-router",
-  "messages": [{"role": "user", "content": "Say hello"}],
-  "max_tokens": 100
+    "choices": [
+        {
+            "content_filter_result": {
+                "error": {
+                    "code": "content_filter_error",
+                    "message": "The contents are not filtered"
+                }
+            },
+            "content_filter_results": {},
+            "finish_reason": "stop",
+            "index": 0,
+            "logprobs": null,
+            "message": {
+                "annotations": [],
+                "content": "Hello! How can I assist you today?",
+                "refusal": null,
+                "role": "assistant"
+            }
+        }
+    ],
+    "created": 1772611752,
+    "id": "chatcmpl-DFba4TaXvfZUjRkxcj9NNSbXtSSVi",
+    "model": "gpt-4.1-nano-2025-04-14",
+    "object": "chat.completion",
+    "prompt_filter_results": [
+        {
+            "prompt_index": 0,
+            "content_filter_results": {
+                "hate": {
+                    "filtered": false,
+                    "severity": "safe"
+                },
+                "jailbreak": {
+                    "filtered": false,
+                    "detected": false
+                },
+                "self_harm": {
+                    "filtered": false,
+                    "severity": "safe"
+                },
+                "sexual": {
+                    "filtered": false,
+                    "severity": "safe"
+                },
+                "violence": {
+                    "filtered": false,
+                    "severity": "safe"
+                }
+            }
+        }
+    ],
+    "system_fingerprint": "fp_490a4ad033",
+    "usage": {
+        "completion_tokens": 10,
+        "completion_tokens_details": {
+            "accepted_prediction_tokens": 0,
+            "audio_tokens": 0,
+            "reasoning_tokens": 0,
+            "rejected_prediction_tokens": 0
+        },
+        "prompt_tokens": 9,
+        "prompt_tokens_details": {
+            "audio_tokens": 0,
+            "cached_tokens": 0
+        },
+        "total_tokens": 19
+    }
 }
-```
-
-If that returns 200 in Postman, then just update the `GPT_ENDPOINT` env variable and the code will work without any code changes.
