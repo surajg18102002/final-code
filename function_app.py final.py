@@ -4,6 +4,7 @@ import json
 import os
 import io
 import re
+import base64
 import requests
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -24,16 +25,29 @@ _df_cache = None
 SNOW_GET_URL    = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/1.0"
 SNOW_GET_KEY    = os.environ["SNOW_GET_KEY"]
 
-TIDAL_URL       = "https://crt-apim.caresource.corp/TidalAutomation/"
-TIDAL_AUTH      = os.environ["TIDAL_AUTH"]
-TIDAL_API_KEY   = os.environ["TIDAL_API_KEY"]
+TIDAL_URL       = os.environ["TIDAL_BASE_URL"]       # https://crt-apim.caresource.corp/TidalAutomation/
+TIDAL_USERNAME  = os.environ["TIDAL_USER"]            # caresource\CST_DashAuto_SVC
+TIDAL_PASSWORD  = os.environ["TIDAL_PASSWORD"]        # actual password
+TIDAL_API_KEY   = os.environ["TIDAL_API_KEY"]         # 9d4e3372a8c7401b85a05be195e746e2
 
 SNOW_UPDATE_URL = "https://apigateway-crt.caresource.corp/ServiceNow/Incident/CreateUpdate/Sync/"
 SNOW_UPDATE_KEY = os.environ["SNOW_UPDATE_KEY"]
 
-GPT_ENDPOINT    = os.environ["GPT_ENDPOINT"]   # https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com
+GPT_ENDPOINT    = os.environ["GPT_ENDPOINT"]          # https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com
 GPT_KEY         = os.environ["GPT_KEY"]
-GPT_MODEL       = os.environ["GPT_MODEL"]       # model-router
+GPT_MODEL       = os.environ["GPT_MODEL"]             # model-router
+
+
+def get_tidal_headers() -> dict:
+    """Build Tidal auth headers exactly as the working pattern."""
+    credentials = f"{TIDAL_USERNAME}:{TIDAL_PASSWORD}"
+    auth_string = base64.b64encode(credentials.encode()).decode()
+    return {
+        "User-Agent":    "CareSource-TidalJobs/1.2",
+        "Authorization": f"Basic {auth_string}",
+        "x-api-key":     TIDAL_API_KEY,
+        "Content-Type":  "application/x-www-form-urlencoded"
+    }
 
 
 # ============================================================
@@ -288,22 +302,19 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
     tidal_output = ""
     if job_id:
         try:
-            tidal_body = (
-                f'data=<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            xml_payload = (
+                f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
                 f'<entry xmlns="http://purl.org/atom/ns#">'
                 f'<tes:JobOutput.getJobOutputRaw xmlns:tes="http://www.tidalsoftware.com/client/tesservlet">'
                 f'<id>{job_id}</id>'
-                f'</tes:JobOutput.getJobOutputRaw></entry>'
+                f'</tes:JobOutput.getJobOutputRaw>'
+                f'</entry>'
             )
             tidal_resp = requests.post(
                 TIDAL_URL,
-                headers={
-                    "Authorization": TIDAL_AUTH,
-                    "x-api-key":     TIDAL_API_KEY,
-                    "Content-Type":  "application/x-www-form-urlencoded"
-                },
-                data=tidal_body,
-                timeout=30,
+                headers=get_tidal_headers(),
+                data={"data": xml_payload},   # dict — matches working pattern
+                timeout=60,
                 verify=False
             )
             tidal_resp.raise_for_status()
