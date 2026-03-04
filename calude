@@ -1,222 +1,24 @@
-Perfect! Now I can see the complete picture. Let me explain how they're making the Tidal API calls:
+Now I have everything I need. The key differences from their working code:
 
----
+1. **`Basic` capital B** (not `basic`)
+2. **`User-Agent` header** they include
+3. **`data={"data": xml_payload}`** as dict not raw string
+4. **Username/password separately** base64 encoded, not pre-encoded token**Update these env variables in Azure Function — remove old ones and add these:**
 
-# 🔍 How They're Making Tidal API Calls
+| Name | Value |
+|---|---|
+| `TIDAL_BASE_URL` | `https://crt-apim.caresource.corp/TidalAutomation/` |
+| `TIDAL_USER` | `caresource\CST_DashAuto_SVC` |
+| `TIDAL_PASSWORD` | the actual password |
+| `TIDAL_API_KEY` | `9d4e3372a8c7401b85a05be195e746e2` |
 
-## **Architecture Overview**
+**Remove `TIDAL_AUTH`** — no longer needed since we now build it dynamically from username + password exactly like the working repo does.
 
-The application makes calls to **Tidal Enterprise Scheduler** (a job scheduling system) via its **XML-based REST API**. Here's the complete flow:
-
----
-
-## **1. Configuration (core/config.py)**
-
-```python name=core/config.py url=https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.Dashboard/blob/feature/Dashboard_AzureFunc/core/config.py#L24-L28
-# Tidal API settings
-TIDAL_BASE_URL = os.environ.get("TIDAL_BASE_URL", "")
-TIDAL_USER = os.environ.get("TIDAL_USER", "")
-TIDAL_PASSWORD = os.environ.get("TIDAL_PASSWORD", "")
-TIDAL_API_KEY = os.getenv("TIDAL_API_KEY", "")
-```
-
-**Tidal credentials are loaded from environment variables:**
-- `TIDAL_BASE_URL` - API endpoint URL
-- `TIDAL_USER` - Username for authentication
-- `TIDAL_PASSWORD` - Password for authentication
-- `TIDAL_API_KEY` - API key header
-
----
-
-## **2. Tidal Client (clients/tidal_client.py)**
-
-### **Authentication Method**
-
-```python name=clients/tidal_client.py url=https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.Dashboard/blob/feature/Dashboard_AzureFunc/clients/tidal_client.py#L27-L35
-credentials = f"{config.username}:{config.password}"
+The key fix is the `get_tidal_headers()` function which now does:
+```python
+credentials = f"{TIDAL_USERNAME}:{TIDAL_PASSWORD}"
 auth_string = base64.b64encode(credentials.encode()).decode()
-
-headers = {
-    "User-Agent": "CareSource-TidalJobs/1.2",
-    "Authorization": f"Basic {auth_string}",
-    "x-api-key": config.api_key,
-    "Content-Type": "application/x-www-form-urlencoded"
-}
+"Authorization": f"Basic {auth_string}"  # capital B
+"User-Agent": "CareSource-TidalJobs/1.2"  # added
+data={"data": xml_payload}               # dict not raw string
 ```
-
-**Authentication uses:**
-- ✅ **Basic Auth** (Base64-encoded username:password)
-- ✅ **API Key** in custom header (`x-api-key`)
-
----
-
-## **3. XML Request Building**
-
-Tidal uses **XML payloads** for queries:
-
-```python name=clients/tidal_client.py url=https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.Dashboard/blob/feature/Dashboard_AzureFunc/clients/tidal_client.py#L63-L72
-xml_payload = f"""<?xml version="1.0" encoding="UTF-8" ?>
-<entry xmlns="http://purl.org/atom/ns#">
-    <tes:JobRun.getList xmlns:tes="http://www.tidalsoftware.com/client/tesservlet">
-        <selectColumns>jobid,jobname,status,statusname,actualstarttime,productiondate</selectColumns>
-        <queryCondition>jobid IN('{job_id_list}') AND actualstarttime &gt;= '{start_date_str}' AND actualstarttime &lt;= '{end_date_str}'</queryCondition>
-        <orderBy>jobid ASC,actualstarttime DESC</orderBy>
-        <firstRow>{first_row}</firstRow>
-        <numRows>{num_rows}</numRows>
-    </tes:JobRun.getList>
-</entry>"""
-```
-
-**XML structure:**
-- Query language similar to SQL
-- Filter by job IDs and date ranges
-- Pagination support (`firstRow`, `numRows`)
-
----
-
-## **4. Making the API Call**
-
-### **Synchronous Version:**
-
-```python name=clients/tidal_client.py url=https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.Dashboard/blob/feature/Dashboard_AzureFunc/clients/tidal_client.py#L187-L219
-def execute_tidal_api_request_sync(config: TidalApiConfig, xml_payload: str) -> str:
-    with httpx.Client(verify=False, timeout=60.0) as client:
-        credentials = f"{config.username}:{config.password}"
-        auth_string = base64.b64encode(credentials.encode()).decode()
-        
-        headers = {
-            "User-Agent": "CareSource-TidalJobs/1.2",
-            "Authorization": f"Basic {auth_string}",
-            "x-api-key": config.api_key,
-            "Content-Type": "application/x-www-form-urlencoded"
-        }
-        
-        data = {"data": xml_payload}
-        
-        response = client.post(
-            config.url,
-            headers=headers,
-            data=data
-        )
-        
-        response.raise_for_status()
-        return response.text
-```
-
-**Key points:**
-- Uses `httpx` library (modern async HTTP client)
-- POST request with XML payload in form data
-- SSL verification disabled (`verify=False`)
-- 60-second timeout
-
----
-
-## **5. Response Parsing**
-
-The API returns **XML responses** that get parsed:
-
-```python name=clients/tidal_client.py url=https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.Dashboard/blob/feature/Dashboard_AzureFunc/clients/tidal_client.py#L236-L282
-def parse_tidal_response(xml_response: str) -> List[TidalJobRun]:
-    namespaces = {
-        'atom': 'http://purl.org/atom/ns#',
-        'tes': 'http://www.tidalsoftware.com/client/tesservlet'
-    }
-    
-    root = ET.fromstring(xml_response)
-    entries = root.findall('.//atom:entry', namespaces)
-    
-    for entry in entries:
-        jobrun = entry.find('tes:jobrun', namespaces)
-        if jobrun is not None:
-            job_id = int(job_id_elem.text)
-            name = name_elem.text
-            status_name = status_elem.text
-            actual_start_time = datetime.fromisoformat(start_time_elem.text)
-            
-            results.append(TidalJobRun(
-                job_id=job_id,
-                name=name,
-                status_name=status_name,
-                actual_start_time=actual_start_time
-            ))
-```
-
-**Parsing:**
-- Uses `xml.etree.ElementTree` (ET)
-- Extracts job ID, name, status, and timestamps
-- Converts to Python dataclass models
-
----
-
-## **6. Complete Flow Example**
-
-### **Getting Job Overview:**
-
-```python name=services/db_service.py url=https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.Dashboard/blob/feature/Dashboard_AzureFunc/services/db_service.py#L87-L125
-def get_latest_tidal_transaction_logs_by_moduleid_sync(module_id: int):
-    # 1. Get job IDs from monitoring database
-    job_data = fetch_tidal_job_data(module_id)
-    job_ids = [str(job['Tidal_Job_Mst_Id']) for job in job_data]
-    
-    # 2. Call Tidal API
-    tidal_job_runs = get_jobs_overview_sync(
-        TIDAL_CONFIG,
-        job_ids,
-        start_date,
-        end_date,
-        first_row=1,
-        num_rows=len(job_ids) * 10
-    )
-    
-    # 3. Convert to response models
-    results = []
-    for job_run in tidal_job_runs:
-        results.append(TidalTransactionLog(
-            jobId=job_run.job_id,
-            JobName=job_run.name,
-            LastRunStatus=job_run.status_name,
-            jobType=job_type
-        ))
-    
-    return results
-```
-
----
-
-## **7. API Endpoints Using Tidal**
-
-The FastAPI endpoints that call Tidal:
-
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /jobs-overview` | Get latest job runs by module |
-| `GET /job-status-chart` | Get job statistics (success/failure counts) |
-| `GET /file-processing-stats` | Get file processing stats and job duration |
-
----
-
-## **Summary: Tidal API Call Pattern**
-
-```mermaid
-graph LR
-    A[FastAPI Endpoint] --> B[db_service.py]
-    B --> C[Fetch Job IDs from SQL]
-    B --> D[tidal_client.py]
-    D --> E[Build XML Payload]
-    D --> F[HTTP POST with Basic Auth]
-    F --> G[Tidal API]
-    G --> H[XML Response]
-    H --> I[Parse XML to Models]
-    I --> J[Return JSON to Client]
-```
-
-**Key Technologies:**
-- 🔐 **Auth**: Basic Auth + API Key
-- 📦 **Protocol**: XML over HTTP POST
-- 🌐 **HTTP Client**: `httpx`
-- 🔄 **Parsing**: `xml.etree.ElementTree`
-- ⚡ **Async Support**: Both sync and async methods
-
----
-
-**Bonus Finding:** I also noticed Azure AI configuration in `core/config.py` (lines 42-49), confirming they're preparing for Azure OpenAI integration but haven't implemented it yet!
