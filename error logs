@@ -1,10 +1,484 @@
-`ModuleNotFoundError: No module named 'requests'` — the `requests` package isn't installed in the Kudu shell environment. But more importantly this tells us the function app itself may also be missing packages.
-
-**Run this in Kudu:**
-```
-python3 -m pip install requests azure-ai-inference azure-core --target /home/site/wwwroot/.python_packages/lib/site-packages
-```
-
-Then restart the function app from the portal and test from Postman again.
-
-This installs the packages into the correct location that Azure Functions uses at runtime.
+{
+    "definition": {
+        "$schema": "{\n  \"definition\": {\n    \"$schema\": \"https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#\",\n    \"actions\": {},\n    \"contentVersion\": \"1.0.0.0\",\n    \"outputs\": {},\n    \"parameters\": {},\n    \"triggers\": {}\n  }\n}\n",
+        "contentVersion": "1.0.0.0",
+        "triggers": {
+            "When_a_new_email_arrives_(V3)": {
+                "type": "ApiConnectionNotification",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "name": "@parameters('$connections')['office365']['connectionId']"
+                        }
+                    },
+                    "fetch": {
+                        "pathTemplate": {
+                            "template": "/v3/Mail/OnNewEmail"
+                        },
+                        "method": "get",
+                        "queries": {
+                            "to": "Vijayakumar.Murthy@caresource.com",
+                            "from": "suraj.girish@caresource.com,vijaykumar.murthy@caresource.com,amit.chowdhury@caresource.com",
+                            "importance": "Any",
+                            "fetchOnlyWithAttachment": false,
+                            "includeAttachments": false,
+                            "subjectFilter": " has been assigned to you",
+                            "folderPath": "Inbox"
+                        }
+                    },
+                    "subscribe": {
+                        "body": {
+                            "NotificationUrl": "@listCallbackUrl()"
+                        },
+                        "pathTemplate": {
+                            "template": "/GraphMailSubscriptionPoke/$subscriptions"
+                        },
+                        "method": "post",
+                        "queries": {
+                            "importance": "Any",
+                            "fetchOnlyWithAttachment": false,
+                            "folderPath": "Inbox"
+                        }
+                    }
+                },
+                "splitOn": "@triggerBody()?['value']"
+            }
+        },
+        "actions": {
+            "ticketNumber_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "ticketNumber",
+                            "type": "string",
+                            "value": "@{split(split(triggerBody()?['subject'], 'INC')[1], ' ')[0]}"
+                        }
+                    ]
+                },
+                "runAfter": {}
+            },
+            "fullTicketNumber_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "fullTicketNumber",
+                            "type": "string",
+                            "value": "@{concat('INC', variables('ticketNumber'))}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "ticketNumber_VAR": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "_HTTP_ServiceNow": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "@concat('https://apigateway-crt.caresource.corp/ServiceNow/Incident/1.0?IncidentNumber=', variables('fullTicketNumber'), '&Source=Streamline')",
+                    "method": "GET",
+                    "headers": {
+                        "X-API-KEY": "ax_8749186c-f37f-4c6e-8e20-5edcbfd8a352",
+                        "Accept": "application/json"
+                    }
+                },
+                "runAfter": {
+                    "Tidal_job_details": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "_Parse_JSON_ServiceNow": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('_HTTP_ServiceNow')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "ResponseData": {
+                                "type": "object",
+                                "properties": {
+                                    "IncidentDetails": {
+                                        "type": "array",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "IncidentNumber": {
+                                                    "type": "string"
+                                                },
+                                                "ConfigurationItem": {
+                                                    "type": "string"
+                                                },
+                                                "ShortDescription": {
+                                                    "type": "string"
+                                                },
+                                                "Description": {
+                                                    "type": "string"
+                                                },
+                                                "AssignmentGroup": {
+                                                    "type": "string"
+                                                },
+                                                "Priority": {
+                                                    "type": "string"
+                                                },
+                                                "State": {
+                                                    "type": "string"
+                                                },
+                                                "Activity": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "WorkNotes": {
+                                                            "type": "array",
+                                                            "items": {
+                                                                "type": "string"
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                            "required": [
+                                                "IncidentNumber",
+                                                "ConfigurationItem",
+                                                "ShortDescription",
+                                                "Description",
+                                                "AssignmentGroup",
+                                                "Priority",
+                                                "State",
+                                                "Activity"
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "_HTTP_ServiceNow": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "shortDesc_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "shortDesc",
+                            "type": "string",
+                            "value": "@{body('_Parse_JSON_ServiceNow')?['ResponseData']?['IncidentDetails'][0]?['ShortDescription']}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "_Parse_JSON_ServiceNow": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "workNotes_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "workNotes",
+                            "type": "string",
+                            "value": "@{body('_Parse_JSON_ServiceNow')?['ResponseData']?['IncidentDetails'][0]?['Activity']?['WorkNotes'][0]}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "configItem_VAR": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "HTTP_Tidal": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://crt-apim.caresource.corp/TidalAutomation/",
+                    "method": "POST",
+                    "headers": {
+                        "Authorization\n": "basic Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM2VSUF46aHhRuEk3R2tFVmd6aTFOTl42dXZpdw==",
+                        "x-api-key": "9d4e3372a8c7401b85a05be195e746e2",
+                        "Content-Type": "application/x-www-form-urlencoded"
+                    },
+                    "body": "@concat('data=<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><entry xmlns=\"http://purl.org/atom/ns#\"><tes:JobOutput.getJobOutputRaw xmlns:tes=\"http://www.tidalsoftware.com/client/tesservlet\"><id>', variables('jobId'), '</id></tes:JobOutput.getJobOutputRaw></entry>')"
+                },
+                "runAfter": {
+                    "workNotes_VAR": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "TidalOutput": {
+                "type": "Compose",
+                "inputs": "@string(body('HTTP_Tidal'))",
+                "runAfter": {
+                    "HTTP_Tidal": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "configItem_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "configItem",
+                            "type": "string",
+                            "value": "@{variables('jobName')}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "jobId_VAR": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "jobId_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "jobId",
+                            "type": "string",
+                            "value": "@{trim(split(variables('shortDesc'), ' | ')[1])}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "_jobName_VAR": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "_jobName_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "jobName",
+                            "type": "string",
+                            "value": "@{trim(replace(split(variables('shortDesc'), ' | ')[0], 'PRD Tidal Job ', ''))}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "shortDesc_VAR": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "AzureFunction": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/find-similar-tickets?code=d-SwY5qqJ0Tr9K5AIBOtaduAkgjZVNXMYkVSnKG6zhJCAzFuvh-F9A==&job_name=', encodeUriComponent(variables('jobName')), '&job_id=', encodeUriComponent(variables('jobId')), '&ticket_number=', encodeUriComponent(variables('fullTicketNumber')))",
+                    "method": "GET",
+                    "headers": {
+                        "Content-Type": "application/json"
+                    }
+                },
+                "runAfter": {
+                    "TidalOutput": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "output_azure_function_VAR": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "output azure function",
+                            "type": "string",
+                            "value": "@{string(body('AzureFunction'))}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "AzureFunction": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "HTTP_GPT4o": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/deployments/gpt-4o/chat/completions?api-version=2025-01-01-preview",
+                    "method": "POST",
+                    "headers": {
+                        "api-key": "AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q",
+                        "Content-Type": "application/json"
+                    },
+                    "body": "@concat('{\"messages\":[{\"role\":\"system\",\"content\":\"You are an expert IT Operations analyst specialising in Tidal job scheduling failures. You will be given a current incident and the top 3 most similar past incidents found by similarity search. Generate a detailed resolution report.\"},{\"role\":\"user\",\"content\":\"## CURRENT INCIDENT\nTicket: ', variables('fullTicketNumber'), '\nJob Name: ', variables('jobName'), '\nJob ID: ', variables('jobId'), '\nTidal Error Log:\n', outputs('TidalOutput'), '\n\n## TOP 3 SIMILAR PAST INCIDENTS (from similarity search)\n', variables('output azure function'), '\n\n## GENERATE THIS EXACT REPORT:\n\n=== TIDAL INCIDENT ANALYSIS REPORT ===\nTicket: ', variables('fullTicketNumber'), '\nJob: ', variables('jobName'), '\n\n--- ERROR SUMMARY ---\n[What failed, which job, which agent, which parent path from Tidal log]\n\n--- ROOT CAUSE ANALYSIS ---\n[Most likely root cause based on the 3 similar incidents]\n\n--- TOP 3 SIMILAR PAST INCIDENTS ---\n1. Ticket: [number] | Config: [config_item]\n   What happened: [from resolution_action]\n   Similarity score: [score]\n\n2. Ticket: [number] | Config: [config_item]\n   What happened: [from resolution_action]\n   Similarity score: [score]\n\n3. Ticket: [number] | Config: [config_item]\n   What happened: [from resolution_action]\n   Similarity score: [score]\n\n--- RECOMMENDED RESOLUTION STEPS ---\n[Numbered specific steps based on how similar incidents were resolved]\n\n--- PREVENTIVE MEASURES ---\n[Concrete actions to prevent recurrence]\"}],\"max_tokens\":2000,\"temperature\":0.2}')"
+                },
+                "runAfter": {
+                    "output_azure_function_VAR": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Parse_JSON_GPT": {
+                "type": "ParseJson",
+                "inputs": {
+                    "content": "@body('HTTP_GPT4o')",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "choices": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "message": {
+                                            "type": "object",
+                                            "properties": {
+                                                "content": {
+                                                    "type": "string"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    "required": [
+                                        "message"
+                                    ]
+                                }
+                            }
+                        }
+                    }
+                },
+                "runAfter": {
+                    "HTTP_GPT4o": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "Initialize_variables-copy": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "finalReport",
+                            "type": "string",
+                            "value": "@{body('Parse_JSON_GPT')?['choices'][0]?['message']?['content']}"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "Parse_JSON_GPT": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "snow_update_ticket": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "https://apigateway-crt.caresource.corp/ServiceNow/Incident/CreateUpdate/Sync/",
+                    "method": "POST",
+                    "headers": {
+                        "X-API-KEY": "ax_38496da1-cf1c-4715-9712-3e6ca826e71e",
+                        "Content-Type": "application/json",
+                        "Accept": "application/json"
+                    },
+                    "body": "@concat('{\"RequestData\":{\"Source\":\"Code Warehouse Automation\",\"IncidentDetails\":[{\"IncidentNumber\":\"', variables('fullTicketNumber'), '\",\"State\":\"6\",\"ResolutionNotes\":\"', replace(replace(variables('finalReport'), '\"', '\"'), decodeUriComponent('%0A'), '\n'), '\",\"AdditionalComments\":\"Resolved via Tidal RAG Analysis\"}]}}')"
+                },
+                "runAfter": {
+                    "Initialize_variables-copy": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Tidal_job_details": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "Job_Name",
+                            "type": "string",
+                            "value": "Import_BEQ_Respons"
+                        },
+                        {
+                            "name": "Job_run_no",
+                            "type": "string",
+                            "value": "4901585"
+                        }
+                    ]
+                },
+                "runAfter": {
+                    "HTTP": [
+                        "Succeeded"
+                    ]
+                }
+            },
+            "HTTP": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/process-incident?code=d-SwY5qqJ0Tr9K5AIBOtaduAkgjZVNXMYkVSnKG6zhJCAzFuvh-F9A==&incident_number=', variables('fullTicketNumber'))",
+                    "method": "GET",
+                    "headers": {
+                        "content-type": "application/json"
+                    }
+                },
+                "runAfter": {
+                    "fullTicketNumber_VAR": [
+                        "Succeeded"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            }
+        },
+        "parameters": {
+            "$connections": {
+                "type": "Object",
+                "defaultValue": {}
+            }
+        }
+    },
+    "parameters": {
+        "$connections": {
+            "type": "Object",
+            "value": {
+                "office365": {
+                    "id": "/subscriptions/38d4263b-9845-4c67-af6f-e238b8dc6403/providers/Microsoft.Web/locations/eastus/managedApis/office365",
+                    "connectionId": "/subscriptions/38d4263b-9845-4c67-af6f-e238b8dc6403/resourceGroups/rg-agentic-ai-application-eastus-dev-01/providers/Microsoft.Web/connections/office365",
+                    "connectionName": "office365",
+                    "connectionProperties": {}
+                }
+            }
+        }
+    }
+}
