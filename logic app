@@ -1,0 +1,110 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "triggers": {
+      "When_a_new_email_arrives": {
+        "type": "ApiConnectionNotification",
+        "inputs": {
+          "host": {
+            "connection": {
+              "referenceName": "office365"
+            }
+          },
+          "fetch": {
+            "pathTemplate": {
+              "template": "/v3/Mail/OnNewEmail"
+            },
+            "method": "get",
+            "queries": {
+              "importance": "Any",
+              "fetchOnlyWithAttachment": false,
+              "includeAttachments": false,
+              "subjectFilter": "has been assigned to you",
+              "folderPath": "Inbox"
+            }
+          },
+          "subscribe": {
+            "body": {
+              "NotificationUrl": "@listCallbackUrl()"
+            },
+            "pathTemplate": {
+              "template": "/GraphMailSubscriptionPoke/$subscriptions"
+            },
+            "method": "post",
+            "queries": {
+              "importance": "Any",
+              "fetchOnlyWithAttachment": false,
+              "folderPath": "Inbox"
+            }
+          }
+        },
+        "splitOn": "@triggerBody()?['value']"
+      }
+    },
+    "actions": {
+      "ticketNumber_VAR": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "ticketNumber",
+              "type": "string",
+              "value": "@{split(split(triggerBody()?['subject'], 'INC')[1], ' ')[0]}"
+            }
+          ]
+        },
+        "runAfter": {}
+      },
+      "fullTicketNumber_VAR": {
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "fullTicketNumber",
+              "type": "string",
+              "value": "@{concat('INC', variables('ticketNumber'))}"
+            }
+          ]
+        },
+        "runAfter": {
+          "ticketNumber_VAR": [
+            "Succeeded"
+          ]
+        }
+      },
+      "Call_Process_Incident": {
+        "type": "Http",
+        "inputs": {
+          "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/process-incident?code=d-SwY5qqJ0Tr9K5AIBOtaduAkgjZVNXMYkVSnKG6zhJCAzFuvh-F9A==&incident_number=', variables('fullTicketNumber'))",
+          "method": "GET",
+          "headers": {
+            "Content-Type": "application/json"
+          }
+        },
+        "runAfter": {
+          "fullTicketNumber_VAR": [
+            "Succeeded"
+          ]
+        },
+        "runtimeConfiguration": {
+          "contentTransfer": {
+            "transferMode": "Chunked"
+          }
+        }
+      }
+    },
+    "outputs": {}
+  },
+  "connectionReferences": {
+    "office365": {
+      "api": {
+        "id": "/subscriptions/38d4263b-9845-4c67-af6f-e238b8dc6403/providers/Microsoft.Web/locations/eastus/managedApis/office365"
+      },
+      "connection": {
+        "id": "/subscriptions/38d4263b-9845-4c67-af6f-e238b8dc6403/resourceGroups/rg-agentic-ai-application-eastus-dev-01/providers/Microsoft.Web/connections/office365"
+      },
+      "connectionName": "office365"
+    }
+  }
+}
