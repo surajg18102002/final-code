@@ -316,6 +316,17 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
                 f'</tes:JobOutput.getJobOutputRaw>'
                 f'</entry>'
             )
+
+            # ── TIDAL DEBUG LOGGING ──────────────────────────────────────
+            logging.info("========== TIDAL CALL START ==========")
+            logging.info(f"[TIDAL] URL           : {TIDAL_URL}")
+            logging.info(f"[TIDAL] Job ID        : {job_id}")
+            logging.info(f"[TIDAL] Job Name      : {job_name}")
+            logging.info(f"[TIDAL] Headers       : {get_tidal_headers()}")
+            logging.info(f"[TIDAL] XML Payload   :\n{xml_payload}")
+            logging.info("========== TIDAL CALL SENDING =========")
+            # ────────────────────────────────────────────────────────────
+
             tidal_resp = requests.post(
                 TIDAL_URL,
                 headers=get_tidal_headers(),
@@ -323,10 +334,20 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
                 timeout=60,
                 verify=False
             )
+
+            # ── TIDAL RESPONSE LOGGING ───────────────────────────────────
+            logging.info(f"[TIDAL] Response Status : {tidal_resp.status_code}")
+            logging.info(f"[TIDAL] Response Headers: {dict(tidal_resp.headers)}")
+            logging.info(f"[TIDAL] Response Body   :\n{tidal_resp.text[:2000]}")
+            logging.info("========== TIDAL CALL END =============")
+            # ────────────────────────────────────────────────────────────
+
             tidal_resp.raise_for_status()
             tidal_output = tidal_resp.text
             pipeline["steps"]["tidal_fetch"] = "success"
         except Exception as e:
+            logging.error(f"[TIDAL] EXCEPTION: {e}")
+            logging.info("========== TIDAL CALL FAILED ==========")
             tidal_output = f"Tidal fetch failed: {e}"
             pipeline["steps"]["tidal_fetch"] = f"FAILED: {e}"
     else:
