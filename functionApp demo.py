@@ -316,17 +316,6 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
                 f'</tes:JobOutput.getJobOutputRaw>'
                 f'</entry>'
             )
-
-            # ── TIDAL DEBUG LOGGING ──────────────────────────────────────
-            logging.info("========== TIDAL CALL START ==========")
-            logging.info(f"[TIDAL] URL           : {TIDAL_URL}")
-            logging.info(f"[TIDAL] Job ID        : {job_id}")
-            logging.info(f"[TIDAL] Job Name      : {job_name}")
-            logging.info(f"[TIDAL] Headers       : {get_tidal_headers()}")
-            logging.info(f"[TIDAL] XML Payload   :\n{xml_payload}")
-            logging.info("========== TIDAL CALL SENDING =========")
-            # ────────────────────────────────────────────────────────────
-
             tidal_resp = requests.post(
                 TIDAL_URL,
                 headers=get_tidal_headers(),
@@ -334,20 +323,10 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
                 timeout=60,
                 verify=False
             )
-
-            # ── TIDAL RESPONSE LOGGING ───────────────────────────────────
-            logging.info(f"[TIDAL] Response Status : {tidal_resp.status_code}")
-            logging.info(f"[TIDAL] Response Headers: {dict(tidal_resp.headers)}")
-            logging.info(f"[TIDAL] Response Body   :\n{tidal_resp.text[:2000]}")
-            logging.info("========== TIDAL CALL END =============")
-            # ────────────────────────────────────────────────────────────
-
             tidal_resp.raise_for_status()
             tidal_output = tidal_resp.text
             pipeline["steps"]["tidal_fetch"] = "success"
         except Exception as e:
-            logging.error(f"[TIDAL] EXCEPTION: {e}")
-            logging.info("========== TIDAL CALL FAILED ==========")
             tidal_output = f"Tidal fetch failed: {e}"
             pipeline["steps"]["tidal_fetch"] = f"FAILED: {e}"
     else:
@@ -375,28 +354,57 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
             endpoint=GPT_ENDPOINT,
             credential=AzureKeyCredential(GPT_KEY)
         )
+
+        system_prompt = (
+            "You are a senior IT Operations analyst at CareSource specializing in Tidal "
+            "Enterprise Scheduler job failures. Your job is to analyze failed Tidal jobs "
+            "and produce clear, structured work notes for ServiceNow incidents. "
+            "You write in plain text only — no markdown, no bullet symbols, no asterisks. "
+            "You are concise, technical, and actionable. Every recommendation must be specific "
+            "and directly tied to the evidence from the error log and past incidents."
+        )
+
+        user_prompt = (
+            f"INCIDENT DETAILS\n"
+            f"Ticket Number : {incident_number}\n"
+            f"Job Name      : {job_name}\n"
+            f"Job Run ID    : {job_id}\n"
+            f"Configuration : {config_item}\n\n"
+
+            f"TIDAL ERROR LOG\n"
+            f"{tidal_output[:2000] if tidal_output and 'failed' not in tidal_output.lower() else 'Not available - Tidal fetch failed'}\n\n"
+
+            f"TOP 3 SIMILAR PAST INCIDENTS (ranked by similarity)\n"
+            f"{similar_text}\n\n"
+
+            f"INSTRUCTIONS\n"
+            f"Using the above information write a ServiceNow work note with these 4 sections:\n\n"
+            f"SECTION 1 - JOB FAILURE SUMMARY\n"
+            f"State clearly which job failed, its run ID, and what the Tidal log shows as the error. "
+            f"Be specific — include any error codes, exit codes, or failure messages from the log. "
+            f"2 to 3 sentences maximum.\n\n"
+            f"SECTION 2 - ERROR MESSAGE\n"
+            f"Extract and quote the exact error message or failure reason from the Tidal log. "
+            f"If the log is unavailable, state that and describe the failure based on the incident details.\n\n"
+            f"SECTION 3 - RELATED PAST INCIDENTS\n"
+            f"List all 3 similar incidents. For each one state the ticket number, "
+            f"what happened in that incident, and how it was resolved. "
+            f"Note the similarity score to indicate how closely it matches the current issue.\n\n"
+            f"SECTION 4 - RECOMMENDED RESOLUTION STEPS\n"
+            f"Based on the error log and how similar incidents were resolved, "
+            f"provide 4 to 6 numbered steps that the engineer should follow to resolve this incident. "
+            f"Steps must be specific and actionable — not generic advice. "
+            f"Reference the past incidents where relevant.\n\n"
+            f"Plain text only. No markdown formatting. No bullet points or asterisks."
+        )
+
         gpt_response = gpt_client.complete(
             messages=[
-                SystemMessage(content=(
-                    "You are an IT Operations analyst. Analyze Tidal job failures and write "
-                    "concise, actionable work notes for ServiceNow tickets. "
-                    "Be brief and direct. No unnecessary headers or padding. "
-                    "Total response must be under 500 words."
-                )),
-                UserMessage(content=(
-                    f"Ticket: {incident_number}\n"
-                    f"Job: {job_name} (ID: {job_id})\n"
-                    f"Error log:\n{tidal_output[:1000] if tidal_output else 'Not available'}\n\n"
-                    f"3 similar past incidents:\n{similar_text}\n\n"
-                    f"Write a work note with:\n"
-                    f"1. What failed (1-2 sentences)\n"
-                    f"2. Likely root cause based on similar incidents (2-3 sentences)\n"
-                    f"3. Recommended fix steps (3-5 numbered steps)\n"
-                    f"Keep it under 400 words. Plain text only, no markdown."
-                ))
+                SystemMessage(content=system_prompt),
+                UserMessage(content=user_prompt)
             ],
             model=GPT_MODEL,
-            max_tokens=600,
+            max_tokens=1000,
             temperature=0.2
         )
         final_report = gpt_response.choices[0].message.content
@@ -436,7 +444,8 @@ def process_incident(req: func.HttpRequest) -> func.HttpResponse:
     # ── 7. Return ─────────────────────────────────────────────────────────
     pipeline["final_report"]  = final_report
     pipeline["top_3_similar"] = top_3
-    pipeline["tidal_raw"]     = tidal_output[:2000]
+    pipeline["tidal_raw"]     = tidal_output
+    pipeline["tidal_length"]  = len(tidal_output)
 
     return func.HttpResponse(
         json.dumps(pipeline, indent=2),
