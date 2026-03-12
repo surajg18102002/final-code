@@ -1,40 +1,85 @@
-The output shows the password clearly:
-
-```
-523eRP^9hxQPI7GkEVgzi1NN^6uviw
-```
-
-The `^` characters ARE there and correct. But the token still doesn't match. This means the password itself is simply wrong — one character somewhere is different from what was used to generate the working curl token.
-
-**Don't waste more time on this. Just use the token directly.**
-
-Go to **Environment Variables → Add new:**
-
-| Name | Value |
-|---|---|
-| `TIDAL_AUTH_TOKEN` | `Y2FyZXNvdXJjZVxDU1RfRGFzaEF1dG9fU1ZDOjUyM2VSUF46aHhRuEk3R2tFVmd6aTFOTl42dXZpdw==` |
-
-Then in `function_app.py` make these two changes:
-
-**At the top with other secrets, replace:**
-```python
-TIDAL_USERNAME  = os.environ["TIDAL_USER"]
-TIDAL_PASSWORD  = os.environ["TIDAL_PASSWORD"]
-```
-**With:**
-```python
-TIDAL_AUTH_TOKEN = os.environ["TIDAL_AUTH_TOKEN"]
-```
-
-**And replace `get_tidal_headers()`:**
-```python
-def get_tidal_headers() -> dict:
-    return {
-        "User-Agent":    "CareSource-TidalJobs/1.2",
-        "Authorization": f"Basic {TIDAL_AUTH_TOKEN}",
-        "x-api-key":     TIDAL_API_KEY,
-        "Content-Type":  "application/x-www-form-urlencoded"
-    }
-```
-
-Commit, deploy, done. The token from the working curl goes in directly — no encoding, no character issues.
+{
+    "definition": {
+        "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+        "contentVersion": "1.0.0.0",
+        "actions": {
+            "HTTP": {
+                "type": "Http",
+                "inputs": {
+                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/process-incident?code=b904ird2m01QDpwVXeSbJi6fQwZ0hgxx5rAkJx-8iYgJAzFurCsj3w==&incident_number=', variables('fullTicketNumber'))",
+                    "method": "GET",
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "x-functions-key": "b904ird2m01QDpwVXeSbJi6fQwZ0hgxx5rAkJx-8iYgJAzFurCsj3w=="
+                    }
+                },
+                "runAfter": {
+                    "Initialize_variables": [
+                        "SUCCEEDED"
+                    ]
+                },
+                "runtimeConfiguration": {
+                    "contentTransfer": {
+                        "transferMode": "Chunked"
+                    }
+                }
+            },
+            "Initialize_variables": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "fullTicketNumber",
+                            "type": "string",
+                            "value": "@{concat('INC', split(split(triggerBody()?['subject'], 'INC')[1], ' ')[0])}"
+                        }
+                    ]
+                },
+                "runAfter": {}
+            }
+        },
+        "outputs": {},
+        "triggers": {
+            "When_a_new_email_arrives_(V3)": {
+                "type": "ApiConnectionNotification",
+                "inputs": {
+                    "host": {
+                        "connection": {
+                            "referenceName": "office365"
+                        }
+                    },
+                    "fetch": {
+                        "pathTemplate": {
+                            "template": "/v3/Mail/OnNewEmail"
+                        },
+                        "method": "get",
+                        "queries": {
+                            "to": "cs220164@caresource.com",
+                            "importance": "Any",
+                            "fetchOnlyWithAttachment": false,
+                            "includeAttachments": false,
+                            "subjectFilter": "has been assigned to you",
+                            "folderPath": "Inbox"
+                        }
+                    },
+                    "subscribe": {
+                        "body": {
+                            "NotificationUrl": "@listCallbackUrl()"
+                        },
+                        "pathTemplate": {
+                            "template": "/GraphMailSubscriptionPoke/$subscriptions"
+                        },
+                        "method": "post",
+                        "queries": {
+                            "importance": "Any",
+                            "fetchOnlyWithAttachment": false,
+                            "folderPath": "Inbox"
+                        }
+                    }
+                },
+                "splitOn": "@triggerBody()?['value']"
+            }
+        }
+    },
+    "kind": "stateful"
+}
