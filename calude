@@ -3,16 +3,30 @@
         "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
         "contentVersion": "1.0.0.0",
         "actions": {
+            "Initialize_variables": {
+                "type": "InitializeVariable",
+                "inputs": {
+                    "variables": [
+                        {
+                            "name": "fullTicketNumber",
+                            "type": "string",
+                            "value": "@{concat('INC', trim(split(split(triggerBody()?['subject'], 'INC')[1], ' ')[0]))}"
+                        }
+                    ]
+                },
+                "runAfter": {}
+            },
             "HTTP": {
                 "type": "Http",
                 "inputs": {
-                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/process-incident?code=b904ird2m01QDpwVXeSbJi6fQwZ0hgxx5rAkJx-8iYgJAzFurCsj3w==&incident_number=', variables('fullTicketNumber'))",
+                    "uri": "@concat('https://func-clinical-prodautomation-eastus-dev-01.azurewebsites.net/api/process-incident?incident_number=', variables('fullTicketNumber'))",
                     "method": "GET",
                     "headers": {
                         "Content-Type": "application/json",
                         "x-functions-key": "b904ird2m01QDpwVXeSbJi6fQwZ0hgxx5rAkJx-8iYgJAzFurCsj3w=="
                     }
                 },
+                "operationOptions": "DisableSSLCertificateValidation",
                 "runAfter": {
                     "Initialize_variables": [
                         "SUCCEEDED"
@@ -23,24 +37,11 @@
                         "transferMode": "Chunked"
                     }
                 }
-            },
-            "Initialize_variables": {
-                "type": "InitializeVariable",
-                "inputs": {
-                    "variables": [
-                        {
-                            "name": "fullTicketNumber",
-                            "type": "string",
-                            "value": "@{concat('INC', split(split(triggerBody()?['subject'], 'INC')[1], ' ')[0])}"
-                        }
-                    ]
-                },
-                "runAfter": {}
             }
         },
         "outputs": {},
         "triggers": {
-            "When_a_new_email_arrives_(V3)": {
+            "When_a_new_email_arrives": {
                 "type": "ApiConnectionNotification",
                 "inputs": {
                     "host": {
@@ -76,8 +77,7 @@
                             "folderPath": "Inbox"
                         }
                     }
-                },
-                "splitOn": "@triggerBody()?['value']"
+                }
             }
         }
     },
