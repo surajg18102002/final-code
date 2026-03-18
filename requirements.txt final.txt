@@ -1,19 +1,8 @@
-In the same Kudu console you used earlier:
-
-```
-https://func-clinical-prodautomation-eastus-dev-01.scm.azurewebsites.net/DebugConsole
-```
-
-Open that URL in your browser, then paste these one by one:
-
-```
-grep "TIDAL_AUTH_TOKEN" /home/site/wwwroot/function_app.py
-```
-```
-grep "GPT_ENDPOINT" /home/site/wwwroot/function_app.py
-```
-```
-head -30 /home/site/wwwroot/function_app.py
-```
-
-Tell me what each one prints.
+azure-functions==1.20.0
+azure-storage-blob==12.28.0
+openai>=1.0.0
+pandas>=2.0.0,<4.0.0
+scikit-learn>=1.3.0,<2.0.0
+openpyxl==3.1.2
+requests>=2.31.0
+httpx>=0.25.0
