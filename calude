@@ -1,5 +1,66 @@
-Team, we need to move away from Model-router and use gpt-5.2. Here is the endpoint and the key for your reference. Please let me know if there is anything that we can't do with this API for which model-router is required. 
-Plain Text
-https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/openai/responses?api-version=2025-04-01-preview
-AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q
-gpt-5.2
+## Full Steps — Clone, Edit & Push Back
+
+### 1. Copy the repo URL
+1. On GitHub, click the green **Code** button
+2. Copy the **HTTPS** URL
+3. Open VS Code
+4. Press `Ctrl+Shift+P` → type **Git: Clone** → Enter
+5. Paste the URL → Enter
+6. Choose a folder → Click **Open**
+
+---
+
+### 2. Switch to the feature branch
+Open terminal (`Ctrl + ~`):
+```bash
+git checkout feature/auto_az_function
+```
+
+---
+
+### 3. Edit the files
+
+Let me generate both complete files now:Good, I have the full file. Now generating both complete files:Here are the exact steps to do this in VS Code:
+
+---
+
+### 1. Clone & switch branch
+```bash
+git clone https://github.com/CareSourceIT/ClinAuto-Clinical.Support.Services.automation.git
+cd ClinAuto-Clinical.Support.Services.automation
+git checkout feature/auto_az_function
+```
+
+---
+
+### 2. Replace the two files
+- Download `openai_helper.py` above → copy it into the **`helpers/`** folder (replace the existing file)
+- Download `requirements.txt` above → copy it into the **project root** (replace the existing file)
+
+---
+
+### 3. Update Azure App Settings
+Go to Azure Portal → your Function App → **Settings** → **Environment variables** → add/update these:
+
+| Key | Value |
+|-----|-------|
+| `GPT_ENDPOINT` | `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/` |
+| `GPT_KEY` | `AirvBEEaEAMU4oBAje6nB774IWMYcHNZJlyyY5yruxBe4V5hSPn0JQQJ99BJACHYHv6XJ3w3AAAAACOGId4Q` |
+| `GPT_MODEL` | `gpt-5.2` |
+| `GPT_API_VERSION` | `2025-04-01-preview` |
+
+> ⚠️ For `GPT_ENDPOINT` use just the base URL without the path — `https://aif-oai-dev-eastus2-01.cognitiveservices.azure.com/` — the openai SDK builds the full path automatically.
+
+---
+
+### 4. Commit and push
+```bash
+git add helpers/openai_helper.py requirements.txt
+git commit -m "Switch from model-router to Azure OpenAI gpt-5.2"
+git push origin feature/auto_az_function
+```
+
+---
+
+### 5. Watch deployment
+Go to GitHub → **Actions** tab → watch the CI/CD pipeline deploy automatically.
